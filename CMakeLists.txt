@@ -6,4 +6,6 @@ set(CMAKE_CXX_STANDARD 20)
 add_executable(DLBMINOOPC01_Aufgabe1 main.cpp
         Server.h
         Server.cpp
+        Client.h
+        Client.cpp
 )
