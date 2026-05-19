@@ -1,0 +1,8 @@
+//
+// Created by Yannick Axmann on 19.05.2026.
+//
+
+#ifndef DLBMINOOPC01_AUFGABE1_SERVER_H
+#define DLBMINOOPC01_AUFGABE1_SERVER_H
+
+#endif //DLBMINOOPC01_AUFGABE1_SERVER_H
