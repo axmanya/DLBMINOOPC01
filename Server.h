@@ -1,8 +1,31 @@
-//
-// Created by Yannick Axmann on 19.05.2026.
-//
+#pragma once
+#include <set>
+#include <string>
+#include <netinet/in.h>
 
-#ifndef DLBMINOOPC01_AUFGABE1_SERVER_H
-#define DLBMINOOPC01_AUFGABE1_SERVER_H
+class Server {
+private:
+    int serverSocket = 0;
+    int serverPort;
+    int maxConnections;
+    bool running = true;
+    sockaddr_in serverAddress{};
+    std::set<int> clientConnections;
 
-#endif //DLBMINOOPC01_AUFGABE1_SERVER_H
+public:
+    Server();
+
+    Server(int port);
+
+    Server(int port, int maxConnections);
+
+    void start();
+
+    void stop();
+
+    void sendMessage(const std::string &message);
+
+    std::string getServerAddress() const;
+
+    int getServerPort() const;
+};
