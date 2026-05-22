@@ -1,6 +1,7 @@
 #pragma once
 #include <set>
 #include <string>
+#include <thread>
 #include <netinet/in.h>
 
 class Server {
@@ -11,6 +12,13 @@ private:
     bool running = true;
     sockaddr_in serverAddress{};
     std::set<int> clientConnections;
+    std::thread connectorThread;
+
+    void handleClientConnection();
+
+    void handleClientMessage(int clientSocket);
+
+    void handleServerInput();
 
 public:
     Server();

@@ -1,5 +1,6 @@
 #pragma once
 #include <string>
+#include <thread>
 
 class Client {
 private:
@@ -7,6 +8,11 @@ private:
     int serverPort;
     std::string serverIP;
     bool running = true;
+    std::thread serverMessageThread;
+
+    void handleServerMessage();
+
+    void handleClientInput();
 
 public:
     Client(std::string ip, int port);

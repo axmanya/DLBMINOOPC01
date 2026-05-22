@@ -8,6 +8,39 @@
 #include <unistd.h>
 
 
+void Client::handleServerMessage() {
+    char buffer[1024] = {};
+
+    while (running) {
+        // ensure the buffer is cleared before reading otherwise old message pieces are still there
+        memset(buffer, 0, sizeof(buffer));
+
+        ssize_t readStatus = recv(clientSocket, buffer, sizeof(buffer), 0);
+        if (readStatus <= 0) {
+            if (readStatus != 0)
+                std::cerr << "Could not read from server: " + std::to_string(errno) << std::endl;
+            disconnect();
+            break;
+        }
+        std::cout << buffer << std::endl;
+    }
+}
+
+void Client::handleClientInput() {
+    while (running) {
+        std::string message;
+        std::getline(std::cin, message);
+
+        if (message.starts_with("/")) {
+            if (message == "/exit")
+                disconnect();
+            else
+                std::cout << "Unknown command: " << message << std::endl;
+        } else {
+            sendMessage(message);
+        }
+    }
+}
 
 Client::Client(std::string ip, int port) : serverIP(std::move(ip)), serverPort(port) {
 }
@@ -44,35 +77,21 @@ void Client::join() {
 
     std::cout << "Connected to " << serverIP << ":" << serverPort << std::endl;
 
-    char buffer[1024] = {};
-    while (running) {
-        // ensure the buffer is cleared before reading otherwise old message pieces are still there
-        memset(buffer, 0, sizeof(buffer));
-        ssize_t readStatus = recv(clientSocket, buffer, sizeof(buffer), 0);
-        if (readStatus <= 0) {
-            if (readStatus != 0)
-                std::cerr << "Could not read from server: " + std::to_string(errno) << std::endl;
-            disconnect();
-            break;
-        }
-        std::cout << buffer << std::endl;
-
-        std::string message;
-        std::getline(std::cin, message);
-        if (message.starts_with("/")) {
-            if (message == "/exit") {
-                disconnect();
-            }
-        } else {
-            sendMessage(message);
-        }
-    }
+    // push message receiving to background thread to release main thread for sending messages
+    serverMessageThread = std::thread(&Client::handleServerMessage, this);
+    handleClientInput();
 }
 
 void Client::disconnect() {
     std::cout << "Disconnected from server" << std::endl;
     running = false;
     close(clientSocket);
+
+    // ensure background threads are joining again to allow shutdown
+    if (serverMessageThread.joinable() && serverMessageThread.get_id() != std::this_thread::get_id()) {
+        serverMessageThread.join();
+    }
+
     exit(0);
 }
 
