@@ -8,6 +8,8 @@
 
 #include <openssl/ssl.h>
 
+#include "LogManager.h"
+
 /**
  * Closes the client connection cleanly and ensures TLS / SSL socket is also cleaned up
  */
@@ -33,7 +35,7 @@ void Client::closeConnection() {
  * and ensures OpenSSL can build up a secure TLS connection
  */
 void Client::prepareTLSConnection() {
-    std::cout << "Prepare TLS Connection" << std::endl;
+    LogManager::getInstance()->Information("Initialize secure TLS Socket");
 
     // loading os ssl error strings and algorithm array for OpenSSL
     SSL_load_error_strings();
@@ -43,7 +45,7 @@ void Client::prepareTLSConnection() {
     // https://docs.openssl.org/3.1/man3/SSL_CTX_new
     sslContext = SSL_CTX_new(TLS_client_method());
     if (sslContext == nullptr) {
-        std::cerr << "Failed to create SSL context: " + std::to_string(errno) << std::endl;
+        LogManager::getInstance()->Error("Failed to create SSL context: " + std::to_string(errno));
         exit(-1);
     }
 }
@@ -53,13 +55,13 @@ void Client::prepareTLSConnection() {
  * verifies that a secure connection can be established
  */
 void Client::createTLSConnection() {
-    std::cout << "Create TLS Connection" << std::endl;
+    LogManager::getInstance()->Information("Create secure connection using TLS");
 
     // create a ssl context structure which can be used for the connection
     sslConnection = SSL_new(sslContext);
     if (sslConnection == nullptr) {
         closeConnection();
-        std::cerr << "Failed to create SSL connection: " + std::to_string(errno) << std::endl;
+        LogManager::getInstance()->Error("Failed to create SSL connection:" + std::to_string(errno));
         exit(-1);
     }
 
@@ -72,7 +74,7 @@ void Client::createTLSConnection() {
     int SSLStatus = SSL_connect(sslConnection);
     if (SSLStatus <= 0) {
         closeConnection();
-        std::cerr << "Failed to connect to server: " + std::to_string(errno) << std::endl;
+        LogManager::getInstance()->Error("Failed to connect to server: " + std::to_string(errno));
         exit(-1);
     }
 }
@@ -92,12 +94,13 @@ void Client::handleServerMessage() {
         int readStatus = SSL_read(sslConnection, buffer, sizeof(buffer) - 1);
         if (readStatus <= 0) {
             if (readStatus != 0)
-                std::cerr << "Server disconnected or SSL read failed: " + std::to_string(errno) << std::endl;
+                LogManager::getInstance()->Error(
+                    "Server disconnected or SSL read failed. SSL error: " + std::to_string(errno));
             disconnect();
             break;
         }
 
-        std::cout << buffer << std::endl;
+        LogManager::getInstance()->Information("", buffer);
     }
 }
 
@@ -107,25 +110,37 @@ void Client::handleServerMessage() {
  */
 void Client::handleClientInput() {
     while (running) {
+        // define a message buffer and read the server input as entire line
         std::string message;
         std::getline(std::cin, message);
 
+        // check for command
         if (message.starts_with("/")) {
-            if (message == "/exit")
+            if (message == "/stop")
                 disconnect();
             else
-                std::cout << "Unknown command: " << message << std::endl;
+                LogManager::getInstance()->Error("Unknown command");
         } else {
             sendMessage(message);
         }
     }
 }
 
+/**
+ * Constructor for connection requires ip and port to establish a connection to the server
+ * @param ip given port where server is listening
+ * @param port given port where server is listening
+ */
 Client::Client(std::string ip, int port) : serverIP(std::move(ip)), serverPort(port) {
 }
 
+/**
+ * Creates a client socket using SSL / TLS for secure connection
+ * connects to the server on a specified IP and port
+ */
 void Client::join() {
-    std::cout << "Try to join " << serverIP << ":" << serverPort << std::endl;
+    LogManager::getInstance()->setLogPrefix( "Client");
+    LogManager::getInstance()->Information("Starting Client");
 
     // prepare OpenSSL connection for SSL / TLS
     prepareTLSConnection();
@@ -135,7 +150,7 @@ void Client::join() {
     // SOCK_STREAM = TCP / IP
     clientSocket = socket(AF_INET, SOCK_STREAM, 0);
     if (clientSocket == -1) {
-        std::cerr << "Failed to create client socket" << std::strerror(errno) << std::endl;
+        LogManager::getInstance()->Error("Failed to create client socket");
         exit(-1);
     }
 
@@ -144,21 +159,23 @@ void Client::join() {
     serverAddress.sin_family = AF_INET;
     serverAddress.sin_port = htons(serverPort);
     if (inet_pton(AF_INET, serverIP.c_str(), &serverAddress.sin_addr) <= 0) {
-        close(clientSocket);
-        std::cerr << "Failed to bind client socket" << std::strerror(errno) << std::endl;
+        closeConnection();
+        LogManager::getInstance()->Error("Failed to bind client socket");
         exit(-1);
     }
+
+    LogManager::getInstance()->Information("Connecting to server " + serverIP + ":" + std::to_string(serverPort));
 
     // connect to the server socket, returns 1 if successful
     int serverSocket = connect(clientSocket, reinterpret_cast<sockaddr *>(&serverAddress), sizeof(serverAddress));
     if (serverSocket == -1) {
-        close(clientSocket);
-        std::cerr << "Failed to accept client connection: " + std::to_string(errno) << std::endl;
+        closeConnection();
+        LogManager::getInstance()->Error("Failed to accept client connection: " + std::to_string(errno));
         exit(-1);
     }
 
     createTLSConnection();
-    std::cout << "TLS Connection Established" << std::endl;
+    LogManager::getInstance()->Information("SSL connection established");
     running = true;
 
     // push message receiving to background thread to release main thread for sending messages
@@ -166,8 +183,11 @@ void Client::join() {
     handleClientInput();
 }
 
+/**
+ * Stop the client server connection and clean up SSL / TLS connections
+ */
 void Client::disconnect() {
-    std::cout << "Disconnecting from Server..." << std::endl;
+    LogManager::getInstance()->Information("Disconnecting from server");
     running = false;
     closeConnection();
 
@@ -179,13 +199,18 @@ void Client::disconnect() {
     exit(0);
 }
 
+/**
+ * Send a message from the client to the connected server socket using SSL / TLS
+ * @param message defines the message to send
+ */
 void Client::sendMessage(const std::string &message) const {
+    LogManager::getInstance()->Debug("Sending message to server: " + message);
 
     // send message using SSL / TLS to the server, returns sending status, if 1 it was successful
     // https://docs.openssl.org/3.1/man3/SSL_write
     int sendStatus = SSL_write(sslConnection, message.c_str(), static_cast<int>(message.length()));
     if (sendStatus == 0) {
-        std::cerr << "Server disconnected or SSL write failed: " + std::to_string(errno) << std::endl;
+        LogManager::getInstance()->Information("Socket was closed");
     } else if (sendStatus <= -1)
-        std::cerr << "Could not send message to server" + std::string(std::strerror(errno)) << std::endl;
+        LogManager::getInstance()->Error("Could not send message to server" + std::string(std::strerror(errno)));
 }

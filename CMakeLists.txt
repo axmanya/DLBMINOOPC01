@@ -7,10 +7,12 @@ set(CMAKE_CXX_STANDARD 23)
 find_package(OpenSSL REQUIRED)
 
 add_executable(DLBMINOOPC01_Aufgabe1 main.cpp
-        Server.h
         Server.cpp
-        Client.h
+        Server.h
         Client.cpp
+        Client.h
+        LogManager.cpp
+        LogManager.h
 )
 
 # link OpenSSL libaries to the project, this is required to use them
