@@ -5,6 +5,72 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+void Server::handleClientConnection() {
+    while (running) {
+        // accept incoming connection, returns an integer value representing the status code of the connection
+        int clientSocket = accept(serverSocket, nullptr, nullptr);
+
+        // if socket status is valid so equals to 1
+        if (clientSocket != -1) {
+            clientConnections.insert(clientSocket);
+            sendMessage("Welcome Client " + std::to_string(clientSocket) + "!");
+            std::cout << "Client connected: " << clientSocket << std::endl;
+
+            // push reading of client messages to background thread
+            // detach the thread to allow the server to continue accepting new connections
+            std::thread clientThread(&Server::handleClientMessage, this, clientSocket);
+            clientThread.detach();
+        }
+    }
+}
+
+void Server::handleClientMessage(int clientSocket) {
+    char clientBuffer[1024] = {};
+
+    while (running) {
+        // ensure the buffer is empty otherwise pieces from previous messages still exist
+        memset(clientBuffer, 0, sizeof(clientBuffer));
+
+        // find the client connection using the given socket as key
+        auto connection = clientConnections.find(clientSocket);
+        if (connection == clientConnections.end()) {
+            break;
+        }
+
+        // check if the socket has been closed beforehand and ensure the program closes the connection cleanly
+        ssize_t readStatus = recv(clientSocket, clientBuffer, sizeof(clientBuffer), 0);
+        if (readStatus <= 0) {
+            if (readStatus == 0)
+                std::cout << "Client disconnected: " << clientSocket << std::endl;
+            else
+                std::cerr << "Could not read from client " + std::to_string(clientSocket) + ": " + std::string(
+                    std::strerror(errno));
+
+            close(clientSocket);
+            clientConnections.erase(clientSocket);
+            sendMessage("Client " + std::to_string(clientSocket) + " disconnected");
+            break;
+        }
+        sendMessage(clientBuffer);
+    }
+}
+
+void Server::handleServerInput() {
+    while (running) {
+        // define a message buffer and read the server input as entire line
+        std::string message;
+        std::getline(std::cin, message);
+        if (message.starts_with("/")) {
+            if (message == "/stop")
+                stop();
+            else
+                std::cout << "Unknown command: " << message << std::endl;
+        } else {
+            sendMessage(message);
+        }
+    }
+}
+
 Server::Server() : serverPort(9000), maxConnections(10) {
 }
 
@@ -47,40 +113,12 @@ void Server::start() {
 
     std::cout << "Server started on " << getServerAddress() << ":" << getServerPort() << std::endl;
 
-    // accept one primary client connection
-    int clientSocket = 0;
-    do {
-        if (!running) break;
-        // accept incoming connection, returns an integer value representing the status code of the connection
-        clientSocket = accept(serverSocket, nullptr, nullptr);
-        if (clientSocket > 0) {
-            clientConnections.insert(clientSocket);
-            sendMessage("Welcome Client " + std::to_string(clientSocket) + "!");
-            std::cout << "Client connected: " << clientSocket << std::endl;
-        }
-    } while (clientSocket <= 0);
-
-    char clientBuffer[1024] = {};
-    while (running) {
-        memset(clientBuffer, 0, sizeof(clientBuffer));
-        ssize_t readStatus = recv(clientSocket, clientBuffer, sizeof(clientBuffer), 0);
-        if (readStatus <= 0) {
-            if (readStatus == 0)
-                std::cout << "Client disconnected: " << clientSocket << std::endl;
-            else
-                std::cerr << "Could not read from client " + std::to_string(clientSocket) + ": " + std::string(
-                    std::strerror(errno));
-
-            close(clientSocket);
-            clientConnections.erase(clientSocket);
-            sendMessage("Client " + std::to_string(clientSocket) + " disconnected");
-            break;
-        }
-    }
+    // Start a background job to handle client connections separately using the reference of the current object
+    connectorThread = std::thread(&Server::handleClientConnection, this);
+    handleServerInput();
 }
 
 void Server::stop() {
-    std::cout << "Stopping server..." << std::endl;
     sendMessage("Stopping server...");
     running = false;
     close(serverSocket);
@@ -92,6 +130,11 @@ void Server::stop() {
 
     // clear memory from client connections
     clientConnections.clear();
+
+    // ensure background threads are joining again to allow shutdown
+    if (connectorThread.joinable()) {
+        connectorThread.join();
+    }
 
     exit(0);
 }
