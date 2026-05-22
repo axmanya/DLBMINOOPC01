@@ -1,0 +1,1 @@
+./cmake-build-debug/project_chat_server client 127.0.0.1 9000

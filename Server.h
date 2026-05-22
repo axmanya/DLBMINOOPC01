@@ -1,18 +1,26 @@
 #pragma once
-#include <set>
+#include <map>
 #include <string>
 #include <thread>
 #include <netinet/in.h>
+#include <openssl/types.h>
 
 class Server {
 private:
     int serverSocket = 0;
+    sockaddr_in serverAddress{};
     int serverPort;
     int maxConnections;
-    bool running = true;
-    sockaddr_in serverAddress{};
-    std::set<int> clientConnections;
+    bool running = false;
+    SSL_CTX *sslContext = nullptr;
+    std::map<int, SSL *> clientConnections;
     std::thread connectorThread;
+
+    void closeConnection();
+
+    void loadTLSCertificate();
+
+    void prepareTLSConnection();
 
     void handleClientConnection();
 

@@ -1,14 +1,23 @@
 #pragma once
 #include <string>
 #include <thread>
+#include <openssl/types.h>
 
 class Client {
 private:
-    int clientSocket = 0;
     int serverPort;
     std::string serverIP;
-    bool running = true;
+    int clientSocket = 0;
+    bool running = false;
+    SSL_CTX *sslContext = nullptr;
+    SSL *sslConnection = nullptr;
     std::thread serverMessageThread;
+
+    void closeConnection();
+
+    void prepareTLSConnection();
+
+    void createTLSConnection();
 
     void handleServerMessage();
 
