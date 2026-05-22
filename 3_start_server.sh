@@ -1,0 +1,1 @@
+./cmake-build-debug/project_chat_server server
