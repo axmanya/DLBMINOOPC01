@@ -255,7 +255,7 @@ void Server::start() {
     // AF_INET = ipv4
     // SOCK_STREAM = TCP / IP
     serverSocket = socket(AF_INET, SOCK_STREAM, 0);
-    if (serverSocket == -1) {
+    if (serverSocket < 0) {
         LogManager::getInstance()->Error("Failed to create server socket: " + std::string(std::strerror(errno)));
         exit(-1);
     }

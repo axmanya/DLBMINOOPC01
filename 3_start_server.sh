@@ -1,1 +1,1 @@
-./cmake-build-debug/project_chat_server server
+./cmake-build-debug/DLBMINOOPC01_Aufgabe1 server
